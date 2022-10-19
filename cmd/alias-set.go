@@ -39,7 +39,9 @@ import (
 	"github.com/minio/cli"
 	"github.com/minio/mc/pkg/probe"
 	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/pkg/console"
+	"github.com/minio/pkg/env"
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/term"
 )
@@ -55,6 +57,11 @@ var aliasSetFlags = []cli.Flag{
 	cli.StringFlag{
 		Name:  "api",
 		Usage: "API signature. Valid options are '[S3v4, S3v2]'",
+	},
+	cli.StringFlag{
+		Name:  "type",
+		Value: "auto",
+		Usage: "credentials type. Valid options are '[auto, normal, ldap]'",
 	},
 }
 
@@ -182,16 +189,17 @@ func setAlias(alias string, aliasCfgV10 aliasConfigV10) aliasMessage {
 
 // probeS3Signature - auto probe S3 server signature: issue a Stat call
 // using v4 signature then v2 in case of failure.
-func probeS3Signature(ctx context.Context, accessKey, secretKey, url string, peerCert *x509.Certificate) (string, *probe.Error) {
+func probeS3Signature(ctx context.Context, accessKey, secretKey, sessionToken, url string, peerCert *x509.Certificate) (string, *probe.Error) {
 	probeBucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "probe-bucket-sign-")
 	// Test s3 connection for API auto probe
 	s3Config := &Config{
 		// S3 connection parameters
-		Insecure:  globalInsecure,
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		HostURL:   urlJoinPath(url, probeBucketName),
-		Debug:     globalDebug,
+		Insecure:     globalInsecure,
+		AccessKey:    accessKey,
+		SecretKey:    secretKey,
+		SessionToken: sessionToken,
+		HostURL:      urlJoinPath(url, probeBucketName),
+		Debug:        globalDebug,
 	}
 	if peerCert != nil {
 		configurePeerCertificate(s3Config, peerCert)
@@ -235,12 +243,13 @@ func probeS3Signature(ctx context.Context, accessKey, secretKey, url string, pee
 
 // BuildS3Config constructs an S3 Config and does
 // signature auto-probe when needed.
-func BuildS3Config(ctx context.Context, url, alias, accessKey, secretKey, api, path string, peerCert *x509.Certificate) (*Config, *probe.Error) {
+func BuildS3Config(ctx context.Context, url, alias, accessKey, secretKey, sessionToken, api, path string, peerCert *x509.Certificate) (*Config, *probe.Error) {
 	s3Config := NewS3Config(url, &aliasConfigV10{
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		URL:       url,
-		Path:      path,
+		AccessKey:    accessKey,
+		SecretKey:    secretKey,
+		SessionToken: sessionToken,
+		URL:          url,
+		Path:         path,
 	})
 
 	if peerCert != nil {
@@ -254,7 +263,7 @@ func BuildS3Config(ctx context.Context, url, alias, accessKey, secretKey, api, p
 		return s3Config, nil
 	}
 	// Probe S3 signature version
-	api, err := probeS3Signature(ctx, accessKey, secretKey, url, peerCert)
+	api, err := probeS3Signature(ctx, accessKey, secretKey, sessionToken, url, peerCert)
 	if err != nil {
 		return nil, err.Trace(url, accessKey, secretKey, api, path)
 	}
@@ -301,6 +310,12 @@ func fetchAliasKeys(args cli.Args) (string, string) {
 	return accessKey, secretKey
 }
 
+const (
+	CmdLDAPEnabled   = "CONSOLE_LDAP_ENABLED"
+	StsDefaultExpire = time.Hour * 1
+	StsWindowTime    = time.Minute * 10
+)
+
 func mainAliasSet(cli *cli.Context, deprecated bool) error {
 	console.SetColor("AliasMessage", color.New(color.FgGreen))
 	var (
@@ -309,6 +324,7 @@ func mainAliasSet(cli *cli.Context, deprecated bool) error {
 		url   = trimTrailingSeparator(args.Get(1))
 		api   = cli.String("api")
 		path  = cli.String("path")
+		ctype = cli.String("type")
 
 		peerCert *x509.Certificate
 		err      *probe.Error
@@ -328,6 +344,17 @@ func mainAliasSet(cli *cli.Context, deprecated bool) error {
 		}
 	}
 
+	switch ctype {
+	case "", "auto":
+		if strings.ToLower(env.Get(CmdLDAPEnabled, "off")) == "on" {
+			ctype = "ldap"
+		} else {
+			ctype = "normal"
+		}
+	case "normal", "ldap":
+	default:
+	}
+
 	accessKey, secretKey := fetchAliasKeys(args)
 	checkAliasSetSyntax(cli, accessKey, secretKey, deprecated)
 
@@ -339,15 +366,43 @@ func mainAliasSet(cli *cli.Context, deprecated bool) error {
 		fatalIf(err.Trace(cli.Args()...), "Unable to initialize new alias from the provided credentials.")
 	}
 
-	s3Config, err := BuildS3Config(ctx, url, alias, accessKey, secretKey, api, path, peerCert)
+	var (
+		stsAccessKey  string
+		stsSecretKey  string
+		stsSessionTk  string
+		stsExpireTime time.Time
+	)
+	if ctype == "ldap" {
+		now := time.Now()
+		var e error
+		stsAccessKey, stsSecretKey, stsSessionTk, e = getStsWithLDAP(url, accessKey, secretKey, peerCert)
+		if e != nil {
+			err = probe.NewError(e)
+			fatalIf(err.Trace(cli.Args()...), "Unable to get sts AccessKey and SecretKey with provided credentials.")
+			return e
+		}
+		stsExpireTime = now.Add(StsDefaultExpire).Add(-StsWindowTime)
+	} else {
+		stsAccessKey = accessKey
+		stsSecretKey = secretKey
+		stsSessionTk = ""
+		stsExpireTime = time.Unix(0, 0)
+	}
+
+	s3Config, err := BuildS3Config(ctx, url, alias, stsAccessKey, stsSecretKey, stsSessionTk, api, path, peerCert)
 	fatalIf(err.Trace(cli.Args()...), "Unable to initialize new alias from the provided credentials.")
 
 	msg := setAlias(alias, aliasConfigV10{
-		URL:       s3Config.HostURL,
-		AccessKey: s3Config.AccessKey,
-		SecretKey: s3Config.SecretKey,
-		API:       s3Config.Signature,
-		Path:      path,
+		URL:          s3Config.HostURL,
+		AccessKey:    accessKey,
+		SecretKey:    secretKey,
+		API:          s3Config.Signature,
+		Path:         path,
+		AType:        ctype,
+		StsAccessKey: stsAccessKey,
+		StsSecretKey: stsSecretKey,
+		StsSessionTk: stsSessionTk,
+		ExpireTime:   stsExpireTime,
 	}) // Add an alias with specified credentials.
 
 	msg.op = "set"
@@ -484,4 +539,61 @@ func configurePeerCertificate(s3Config *Config, peerCert *x509.Certificate) {
 	default:
 		s3Config.Transport.TLSClientConfig.RootCAs.AddCert(peerCert)
 	}
+}
+
+func prepareStsClient(peerCert *x509.Certificate, url string) *http.Client {
+	var cas *x509.CertPool
+	if globalRootCAs != nil {
+		if peerCert != nil {
+			globalRootCAs.AddCert(peerCert)
+		}
+		cas = globalRootCAs
+	}
+	if peerCert != nil {
+		cas.AddCert(peerCert)
+	}
+	schem, _ := getScheme(url)
+	insecure := schem != "http" && peerCert != nil
+	DefaultTransport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 15 * time.Second,
+		}).DialContext,
+		MaxIdleConnsPerHost:   256,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 10 * time.Second,
+		DisableCompression:    true,
+		TLSClientConfig: &tls.Config{
+			RootCAs:            cas,
+			InsecureSkipVerify: insecure,
+			MinVersion:         tls.VersionTLS12,
+		},
+	}
+	c := &http.Client{
+		Transport: DefaultTransport,
+	}
+
+	return c
+}
+
+func getStsWithLDAP(endpoint, ldapUser, ldapPassword string, peerCert *x509.Certificate) (stsAccessKey, stsSecretKey, stsSessionTk string, err error) {
+	client := prepareStsClient(peerCert, endpoint)
+
+	creds := credentials.New(&credentials.LDAPIdentity{
+		Client:          client,
+		STSEndpoint:     endpoint,
+		LDAPUsername:    ldapUser,
+		LDAPPassword:    ldapPassword,
+		RequestedExpiry: StsDefaultExpire,
+	})
+
+	tokens, err := creds.Get()
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return tokens.AccessKeyID, tokens.SecretAccessKey, tokens.SessionToken, nil
+
 }

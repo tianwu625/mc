@@ -464,3 +464,40 @@ func getPrometheusToken(hostConfig *aliasConfigV10) (string, error) {
 	}
 	return token, nil
 }
+
+func stsIsExpire(aliasCfg *aliasConfigV10) bool {
+	if aliasCfg.AType == "ldap" {
+		return aliasCfg.ExpireTime.Before(time.Now())
+	}
+
+	return false
+}
+
+func updateStsKey(alias string, aliasCfg *aliasConfigV10) error {
+	aKey, sKey, sToken, e := getStsWithLDAP(aliasCfg.URL, aliasCfg.AccessKey, aliasCfg.SecretKey, nil)
+	if e != nil {
+		return e
+	}
+	aliasCfg.StsAccessKey = aKey
+	aliasCfg.StsSecretKey = sKey
+	aliasCfg.StsSessionTk = sToken
+	aliasCfg.ExpireTime = time.Now().Add(StsDefaultExpire).Add(-StsWindowTime)
+	setAlias(alias, *aliasCfg)
+
+	return nil
+}
+
+func configV10ToForS3(aliasCfg *aliasConfigV10) *aliasConfigV10 {
+	if aliasCfg.AType == "ldap" {
+		var cfg aliasConfigV10
+		cfg.AccessKey = aliasCfg.StsAccessKey
+		cfg.SecretKey = aliasCfg.StsSecretKey
+		cfg.SessionToken = aliasCfg.StsSessionTk
+		cfg.URL = aliasCfg.URL
+		cfg.Path = aliasCfg.Path
+		cfg.API = aliasCfg.API
+		return &cfg
+	}
+
+	return aliasCfg
+}

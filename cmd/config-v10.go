@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"sync"
+	"time"
 
 	"github.com/minio/mc/pkg/probe"
 	"github.com/minio/pkg/quick"
@@ -38,14 +39,19 @@ var (
 
 // aliasConfig configuration of an alias.
 type aliasConfigV10 struct {
-	URL          string `json:"url"`
-	AccessKey    string `json:"accessKey"`
-	SecretKey    string `json:"secretKey"`
-	SessionToken string `json:"sessionToken,omitempty"`
-	API          string `json:"api"`
-	Path         string `json:"path"`
-	License      string `json:"license,omitempty"`
-	APIKey       string `json:"apiKey,omitempty"`
+	URL          string    `json:"url"`
+	AccessKey    string    `json:"accessKey"`
+	SecretKey    string    `json:"secretKey"`
+	SessionToken string    `json:"sessionToken,omitempty"`
+	API          string    `json:"api"`
+	Path         string    `json:"path"`
+	License      string    `json:"license,omitempty"`
+	APIKey       string    `json:"apiKey,omitempty"`
+	AType        string    `json:"type,omitempty"`
+	StsAccessKey string    `json:"stsAccessKey,omitempty"`
+	StsSecretKey string    `json:"stsSecretKey,omitempty"`
+	StsSessionTk string    `json:"stsSessionTk,omitempty"`
+	ExpireTime   time.Time `json:"stsExpire,omitempty"`
 }
 
 // configV10 config version.

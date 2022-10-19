@@ -614,7 +614,17 @@ func newClientFromAlias(alias, urlStr string) (Client, *probe.Error) {
 		return fsClient, nil
 	}
 
-	s3Config := NewS3Config(urlStr, hostCfg)
+	if stsIsExpire(hostCfg) {
+		e := updateStsKey(alias, hostCfg)
+		if e != nil {
+			err = probe.NewError(e)
+			return nil, err.Trace(alias, urlStr)
+		}
+	}
+
+	cfgForS3 := configV10ToForS3(hostCfg)
+
+	s3Config := NewS3Config(urlStr, cfgForS3)
 
 	s3Client, err := S3New(s3Config)
 	if err != nil {

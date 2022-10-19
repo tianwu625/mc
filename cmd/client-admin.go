@@ -146,7 +146,17 @@ func newAdminClient(aliasedURL string) (*madmin.AdminClient, *probe.Error) {
 		return nil, probe.NewError(fmt.Errorf("No valid configuration found for '%s' host alias", urlStrFull))
 	}
 
-	s3Config := NewS3Config(urlStrFull, aliasCfg)
+	if stsIsExpire(aliasCfg) {
+		e := updateStsKey(aliasedURL, aliasCfg)
+		if e != nil {
+			err = probe.NewError(e)
+			return nil, err.Trace(alias, urlStrFull)
+		}
+	}
+
+	cfgForS3 := configV10ToForS3(aliasCfg)
+
+	s3Config := NewS3Config(urlStrFull, cfgForS3)
 
 	s3Client, err := s3AdminNew(s3Config)
 	if err != nil {

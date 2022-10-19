@@ -62,6 +62,11 @@ var configHostAddFlags = []cli.Flag{
 		Name:  "api",
 		Usage: "API signature. Valid options are '[S3v4, S3v2]'",
 	},
+	cli.StringFlag{
+		Name:  "type",
+		Value: "auto",
+		Usage: "credentials type. Valid options are '[auto, normal, ldap]'",
+	},
 }
 
 var configHostAddCmd = cli.Command{
