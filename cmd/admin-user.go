@@ -28,6 +28,7 @@ var adminUserSubcommands = []cli.Command{
 	adminUserInfoCmd,
 	adminUserPolicyCmd,
 	adminUserSvcAcctCmd,
+	adminUserDetailCmd,
 }
 
 var adminUserCmd = cli.Command{

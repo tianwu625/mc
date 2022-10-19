@@ -82,13 +82,17 @@ func checkAdminUserAddSyntax(ctx *cli.Context) {
 
 // userMessage container for content message structure
 type userMessage struct {
-	op         string
-	Status     string   `json:"status"` // TODO: remove this?
-	AccessKey  string   `json:"accessKey,omitempty"`
-	SecretKey  string   `json:"secretKey,omitempty"`
-	PolicyName string   `json:"policyName,omitempty"`
-	UserStatus string   `json:"userStatus,omitempty"`
-	MemberOf   []string `json:"memberOf,omitempty"`
+	op          string
+	Status      string   `json:"status"` // TODO: remove this?
+	AccessKey   string   `json:"accessKey,omitempty"`
+	SecretKey   string   `json:"secretKey,omitempty"`
+	PolicyName  string   `json:"policyName,omitempty"`
+	UserStatus  string   `json:"userStatus,omitempty"`
+	MemberOf    []string `json:"memberOf,omitempty"`
+	CanonicalID string   `json:"canonicalID,omitempty"`
+	Pgid        string   `json:"primeGroupID,omitempty"`
+	Sgids       []string `json:"additionalGroupIDs,omitempty"`
+	Uid         string   `json:"userID,omitempty"`
 }
 
 func (u userMessage) String() string {
@@ -120,6 +124,17 @@ func (u userMessage) String() string {
 		return console.Colorize("UserMessage", "Enabled user `"+u.AccessKey+"` successfully.")
 	case "add":
 		return console.Colorize("UserMessage", "Added user `"+u.AccessKey+"` successfully.")
+	case "detail":
+		msgs := []string{
+			fmt.Sprintf("AccessKey: %s", u.AccessKey),
+			fmt.Sprintf("Status: %s", u.UserStatus),
+			fmt.Sprintf("User ID: %s", u.Uid),
+			fmt.Sprintf("Prime Group ID: %s", u.Pgid),
+		}
+		if len(u.Sgids) != 0 {
+			msgs = append(msgs, fmt.Sprintf("Additional Group IDs: %s", strings.Join(u.Sgids, ",")))
+		}
+		return console.Colorize("UserMessage", strings.Join(msgs, "\n"))
 	}
 	return ""
 }
