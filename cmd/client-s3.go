@@ -2790,3 +2790,53 @@ func (c *S3Client) Restore(ctx context.Context, versionID string, days int) *pro
 	}
 	return nil
 }
+
+func (c *S3Client) AclGet(ctx context.Context) (*minio.AccessControlPolicyDecode, *probe.Error) {
+	bucket, object := c.url2BucketAndObject()
+
+	if bucket == "" {
+		return nil, probe.NewError(BucketNameEmpty{})
+	}
+
+	if object == "" {
+		acld, err := c.api.GetBucketAcl(ctx, bucket)
+		if err != nil {
+			return nil, probe.NewError(err)
+		}
+		return acld, nil
+	}
+
+	acld, err := c.api.GetObjectAcl(ctx, bucket, object)
+	if err != nil {
+		return nil, probe.NewError(err)
+	}
+
+	return acld, nil
+}
+
+func (c *S3Client) AclSet(ctx context.Context, aclstring string) *probe.Error {
+	bucket, object := c.url2BucketAndObject()
+
+	if bucket == "" {
+		return probe.NewError(BucketNameEmpty{})
+	}
+	acle := minio.AccessControlPolicyEncode{}
+	err := json.Unmarshal([]byte(aclstring), &acle)
+	if err != nil {
+		return probe.NewError(err)
+	}
+
+	if object == "" {
+		err = c.api.PutBucketAcl(ctx, bucket, &acle)
+		if err != nil {
+			return probe.NewError(err)
+		}
+	}
+
+	err = c.api.PutObjectAcl(ctx, bucket, object, &acle)
+	if err != nil {
+		return probe.NewError(err)
+	}
+
+	return nil
+}

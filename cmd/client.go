@@ -172,6 +172,9 @@ type Client interface {
 
 	// Restore an object
 	Restore(ctx context.Context, versionID string, days int) *probe.Error
+	// Acl operations
+	AclGet(ctx context.Context) (*minio.AccessControlPolicyDecode, *probe.Error)
+	AclSet(ctx context.Context, aclstring string) *probe.Error
 }
 
 // ClientContent - Content container for content metadata

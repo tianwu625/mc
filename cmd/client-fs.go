@@ -1290,3 +1290,17 @@ func (f *fsClient) Restore(_ context.Context, _ string, _ int) *probe.Error {
 		APIType: "filesystem",
 	})
 }
+
+func (f *fsClient) AclGet(ctx context.Context) (*minio.AccessControlPolicyDecode, *probe.Error) {
+	return nil, probe.NewError(APINotImplemented{
+		API:     "AclGet",
+		APIType: "filesystem",
+	})
+}
+
+func (f *fsClient) AclSet(ctx context.Context, aclstring string) *probe.Error {
+	return probe.NewError(APINotImplemented{
+		API:     "AclSet",
+		APIType: "filesystem",
+	})
+}
