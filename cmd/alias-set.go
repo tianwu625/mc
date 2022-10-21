@@ -138,12 +138,12 @@ func checkAliasSetSyntax(ctx *cli.Context, accessKey string, secretKey string, d
 		fatalIf(errInvalidURL(url), "Invalid URL.")
 	}
 
-	if !isValidAccessKey(accessKey) {
+	if !isValidUserName(accessKey) {
 		fatalIf(errInvalidArgument().Trace(accessKey),
 			"Invalid access key `"+accessKey+"`.")
 	}
 
-	if !isValidSecretKey(secretKey) {
+	if !isValidPasswd(secretKey) {
 		fatalIf(errInvalidArgument().Trace(secretKey),
 			"Invalid secret key `"+secretKey+"`.")
 	}

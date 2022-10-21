@@ -24,6 +24,8 @@ var validAPIs = []string{"S3v4", "S3v2"}
 const (
 	accessKeyMinLen = 3
 	secretKeyMinLen = 8
+	usernameMinLen  = 3
+	passwordMinLen  = 1
 )
 
 // isValidAccessKey - validate access key for right length.
@@ -34,12 +36,28 @@ func isValidAccessKey(accessKey string) bool {
 	return len(accessKey) >= accessKeyMinLen
 }
 
+func isValidUserName(username string) bool {
+	if username == "" {
+		return true
+	}
+
+	return len(username) >= usernameMinLen
+}
+
 // isValidSecretKey - validate secret key for right length.
 func isValidSecretKey(secretKey string) bool {
 	if secretKey == "" {
 		return true
 	}
 	return len(secretKey) >= secretKeyMinLen
+}
+
+func isValidPasswd(passwd string) bool {
+	if passwd == "" {
+		return true
+	}
+
+	return len(passwd) >= passwordMinLen
 }
 
 // trimTrailingSeparator - Remove trailing separator.
